@@ -28,6 +28,8 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))  # chains/ dir for bare imports
+
 
 from chain_0_ICP import BrandBrief, ICPProfile, run_icp_chain
 from chain_1_keywordExpansion import ExpandedKeywordSet, run_keyword_expansion
@@ -229,10 +231,157 @@ async def run_pipeline(
         timings=timings,
     )
 
+# ─────────────────────────────────────────────
+# RESULT FLATTENING  (Chain 4 → DB/Frontend)
+# ─────────────────────────────────────────────
+
+def flatten_audit_to_dossier(audited: dict[str, Any]) -> dict[str, Any]:
+    """
+    Flatten Chain 4's rich audit output into the flat dict format
+    expected by database.save_results() and the frontend Dashboard.
+    """
+    audit = audited.get("audit") or {}
+    pricing = audited.get("pricing") or {}
+    brand_safety = audit.get("brand_safety") or {}
+    engagement = audit.get("engagement_metrics") or {}
+    credibility = audit.get("credibility") or {}
+    audience = audit.get("audience_quality") or {}
+
+    # Map risk_level → risk_flag (green/amber/red)
+    risk_level = brand_safety.get("risk_level", "safe")
+    risk_flag_map = {"safe": "green", "review": "amber", "risk": "amber", "high_risk": "red"}
+    risk_flag = risk_flag_map.get(risk_level, "green")
+
+    risk_evidence = brand_safety.get("rationale")
+    risk_sources = brand_safety.get("partnership_conflicts", [])
+
+    # Composite score: weighted average of audit dimensions
+    try:
+        eng_score = (engagement.get("engagement_rate") or 0)
+        auth_score = (audience.get("authenticity_score") or 0) * 100
+        niche_score = (credibility.get("niche_authority") or 0) * 100
+        safety_score = 100 if risk_flag == "green" else (50 if risk_flag == "amber" else 0)
+        composite = round(
+            eng_score * 0.4 + auth_score * 0.3 + niche_score * 0.2 + safety_score * 0.1, 1
+        )
+    except (TypeError, ValueError):
+        composite = 0.0
+
+    ai_summary = audit.get("audit_rationale", "")
+    price_low = int(pricing.get("estimated_rate_inr", 0))
+    price_high = int(price_low * 1.5) if price_low else 0
+
+    return {
+        "handle": audited.get("handle", ""),
+        "platform": audited.get("platform", "youtube"),
+        "followers": audited.get("followers", 0),
+        "engagement_rate": audited.get("engagement_rate") or audited.get("median_er") or 0,
+        "risk_flag": risk_flag,
+        "risk_evidence": risk_evidence,
+        "risk_sources": risk_sources,
+        "price_low": price_low,
+        "price_high": price_high,
+        "composite_score": composite,
+        "ai_summary": ai_summary,
+    }
+
+
+# ─────────────────────────────────────────────
+# BACKGROUND TASK ENTRY POINT  (called by route)
+# ─────────────────────────────────────────────
+
+async def execute_pipeline(job_id: str, route_brief) -> None:
+    """
+    Background task called by campaign.py:
+        background_tasks.add_task(execute_pipeline, job_id, brief)
+
+    Converts the route-level BrandBrief → chain BrandBrief,
+    runs the full pipeline, flattens results, and saves to DB.
+
+    Creates its own DB session since background tasks run
+    outside the request lifecycle.
+    """
+    import traceback
+    from db.database import (
+        SessionLocal, update_campaign_status, update_campaign_artifacts,
+        save_results, save_pipeline_run,
+    )
+
+    db = SessionLocal()
+    logger.info("[Pipeline] Starting job %s", job_id)
+    update_campaign_status(db, job_id, "running")
+
+    try:
+        # Convert route brief → chain brief
+        chain_brief = BrandBrief(**route_brief.model_dump())
+
+        groq_api_key = os.environ.get("GROQ_API_KEY", "")
+        if not groq_api_key:
+            raise ValueError("GROQ_API_KEY not set in environment")
+
+        result = await run_pipeline(
+            brief=chain_brief,
+            groq_api_key=groq_api_key,
+            max_discovery_queries=5,
+            max_audit_candidates=5,
+            follower_tolerance=0.5,
+        )
+
+        # Save ICP profile and keywords to campaign
+        update_campaign_artifacts(
+            db, job_id,
+            icp_profile=result.icp.model_dump() if result.icp else None,
+            keywords=result.keywords.model_dump() if result.keywords else None,
+        )
+
+        # Build enriched dossiers with full audit data for normalized tables
+        enriched = []
+        for a in result.audited:
+            flat = flatten_audit_to_dossier(a)
+            # Attach full audit dict so save_results can populate the audits table
+            flat["audit"] = a.get("audit")
+            # Attach pricing details
+            pricing = a.get("pricing", {})
+            flat["cpm_usd"] = pricing.get("cpm_usd", 0.0)
+            flat["pricing_tier"] = pricing.get("pricing_tier")
+            flat["niche_multiplier"] = pricing.get("niche_multiplier", 1.0)
+            flat["platform_multiplier"] = pricing.get("platform_multiplier", 1.0)
+            enriched.append(flat)
+
+        enriched.sort(key=lambda d: d.get("composite_score", 0), reverse=True)
+
+        if enriched:
+            save_results(db, job_id, enriched)
+
+        # Save pipeline run stats
+        save_pipeline_run(
+            db, job_id,
+            timings=result.timings,
+            discovered=len(result.discovered),
+            filtered=len(result.filtered),
+            audited=len(result.audited),
+        )
+
+        update_campaign_status(db, job_id, "complete")
+        logger.info(
+            "[Pipeline] Job %s complete — %d dossiers (%.1fs)",
+            job_id, len(enriched), result.timings.get("total", 0),
+        )
+
+    except Exception as e:
+        logger.error("[Pipeline] Job %s failed: %s\n%s", job_id, e, traceback.format_exc())
+        update_campaign_status(db, job_id, "failed")
+
+    finally:
+        db.close()
+
+
+
 
 # ─────────────────────────────────────────────
 # QUICK LOCAL TEST
 # ─────────────────────────────────────────────
+
 
 if __name__ == "__main__":
     import json

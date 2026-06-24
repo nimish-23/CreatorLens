@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, Response
 from routes.campaign import router as campaign_router
 from db.database import init_db
 
-app = FastAPI(title="CreatorLens API", version="0.1.0")
+app = FastAPI(title="CreatorLens API", version="0.2.0")
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -32,4 +32,4 @@ async def startup():
 
 @app.get("/")
 def root():
-    return {"status": "CreatorLens API running"}
+    return {"status": "CreatorLens API running", "db": "supabase"}

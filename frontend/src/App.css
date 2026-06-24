@@ -111,7 +111,11 @@ body {
 
 /* ─── BRIEF FORM ──────────────────────────────────── */
 .brief-form {
-  max-width: 720px;
+  max-width: 840px;
+}
+
+.form-row.triple {
+  grid-template-columns: 1fr 1fr 1fr;
 }
 
 .form-header {

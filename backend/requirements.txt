@@ -4,9 +4,9 @@ python-dotenv
 httpx
 pydantic
 sqlalchemy
+psycopg2-binary
 tavily-python
 
 # LangChain ecosystem
 langchain-core
 langchain-groq
-

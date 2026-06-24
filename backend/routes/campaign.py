@@ -1,12 +1,17 @@
 """
 campaign.py — Campaign API routes
 Clean route definitions only. All business logic lives in services/.
+Now uses SQLAlchemy ORM via Supabase PostgreSQL.
 """
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from models.schemas import BrandBrief, CampaignResponse, JobStatus
-from db.database import create_job, get_job, get_conn
-from services.pipeline import execute_pipeline
+from db.database import (
+    get_db, create_campaign, get_campaign, list_campaigns, SessionLocal,
+)
+from chains.pipeline import execute_pipeline
 from services.outreach import draft_outreach
 from services.platforms.instagram import find_competitor_influencers
 import uuid
@@ -22,9 +27,13 @@ active_runs: list[str] = []
 # POST /api/run-campaign
 # -----------------------------------------------------------
 @router.post("/run-campaign", response_model=CampaignResponse)
-async def run_campaign(brief: BrandBrief, background_tasks: BackgroundTasks):
+async def run_campaign(
+    brief: BrandBrief,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     job_id = str(uuid.uuid4())
-    create_job(job_id, brief.model_dump_json())
+    create_campaign(db, job_id, brief.model_dump())
 
     background_tasks.add_task(execute_pipeline, job_id, brief)
 
@@ -35,33 +44,28 @@ async def run_campaign(brief: BrandBrief, background_tasks: BackgroundTasks):
 # GET /api/campaigns
 # -----------------------------------------------------------
 @router.get("/campaigns")
-def get_campaigns():
-    conn = get_conn()
-    jobs = conn.execute(
-        "SELECT job_id, status, brief_json, created_at, completed_at FROM jobs ORDER BY created_at DESC LIMIT 20"
-    ).fetchall()
-    conn.close()
-    return [dict(j) for j in jobs]
+def get_campaigns(db: Session = Depends(get_db)):
+    return list_campaigns(db)
 
 
 # -----------------------------------------------------------
 # GET /api/status/{job_id}
 # -----------------------------------------------------------
 @router.get("/status/{job_id}", response_model=CampaignResponse)
-def get_status(job_id: str):
-    job, results = get_job(job_id)
+def get_status(job_id: str, db: Session = Depends(get_db)):
+    job, results = get_campaign(db, job_id)
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
     dossiers = None
     if job["status"] == "complete" and results:
-        dossiers = [dict(r) for r in results]
+        dossiers = results
 
     return CampaignResponse(
         job_id=job_id,
         status=JobStatus(job["status"]),
-        results=dossiers
+        results=dossiers,
     )
 
 
@@ -69,8 +73,12 @@ def get_status(job_id: str):
 # POST /api/outreach/{job_id}/{handle}
 # -----------------------------------------------------------
 @router.post("/outreach/{job_id}/{handle}")
-async def generate_outreach(job_id: str, handle: str):
-    job, results = get_job(job_id)
+async def generate_outreach(
+    job_id: str,
+    handle: str,
+    db: Session = Depends(get_db),
+):
+    job, results = get_campaign(db, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 

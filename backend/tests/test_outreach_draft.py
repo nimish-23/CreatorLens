@@ -1,63 +1,50 @@
+"""
+Smoke test for outreach message drafting.
+Run from backend/: python tests/test_outreach_draft.py
+"""
 import asyncio
-import json
-import sys
 import os
+import sys
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db.database import get_conn, get_job
-from services.scoring import draft_outreach
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from services.outreach import draft_outreach
+
+
+MOCK_INFLUENCER = {
+    "handle": "tech_guru_99",
+    "platform": "youtube",
+    "followers": 150000,
+    "engagement_rate": 5.2,
+    "ai_summary": "Tech reviewer focused on mechanical keyboards and productivity setups.",
+}
+
+MOCK_BRIEF = {
+    "niche": "Technology and Peripherals",
+    "target_audience": "Software engineers and desk setup enthusiasts",
+    "budget_inr": 500000,
+}
+
 
 async def main():
-    conn = get_conn()
-    job_row = conn.execute("SELECT job_id FROM jobs LIMIT 1").fetchone()
-    conn.close()
-    
-    output = []
+    if not os.getenv("GROQ_API_KEY"):
+        print("GROQ_API_KEY not set — skipping live outreach test.")
+        return
 
-    if job_row:
-        job_id = job_row["job_id"]
-        job, results = get_job(job_id)
-        if results:
-            influencer = results[0]
-            brief = json.loads(job["brief_json"])
-            output.append(f"Testing draft_outreach for influencer: {influencer['handle']}")
-            output.append(f"Brand brief niche: {brief.get('niche')}")
-            
-            try:
-                draft = await draft_outreach(influencer, brief)
-                output.append("\n--- GENERATED DRAFT ---")
-                output.append(draft)
-                output.append("-----------------------\n")
-            except Exception as e:
-                output.append(f"Error generating draft: {e}")
-        else:
-            output.append("Job found, but no results/influencers available.")
-    else:
-        output.append("No jobs found in the database. Using mock data.")
-        mock_influencer = {
-            "handle": "tech_guru_99",
-            "platform": "youtube",
-            "followers": 150000,
-            "engagement_rate": 5.2,
-            "ai_summary": "tech_guru_99 is a prominent tech reviewer specializing in mechanical keyboards and productivity setups."
-        }
-        mock_brief = {
-            "niche": "Technology and Peripherals",
-            "target_audience": "Software engineers and desk setup enthusiasts"
-        }
-        
-        output.append(f"Testing draft_outreach for mock influencer: {mock_influencer['handle']}")
-        try:
-            draft = await draft_outreach(mock_influencer, mock_brief)
-            output.append("\n--- GENERATED DRAFT ---")
-            output.append(draft)
-            output.append("-----------------------\n")
-        except Exception as e:
-            output.append(f"Error generating draft: {e}")
+    print(f"Drafting outreach for @{MOCK_INFLUENCER['handle']}...")
+    try:
+        draft = await draft_outreach(MOCK_INFLUENCER, MOCK_BRIEF)
+        print("\n--- GENERATED DRAFT ---")
+        print(draft)
+        print("-----------------------")
+    except Exception as e:
+        print(f"Error generating draft: {e}")
+        raise
 
-    with open("draft_result.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(output))
 
 if __name__ == "__main__":
     asyncio.run(main())

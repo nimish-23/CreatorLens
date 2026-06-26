@@ -3,7 +3,7 @@
   <p><b>Find the Right Influencer. Verify Them. Know What to Pay.</b></p>
 </div>
 
-An influencer marketing intelligence platform that automates the entire pre-campaign workflow — discovery, qualification, brand safety audit, and pricing — using the **YouTube Data API**, **Tavily web search**, and **Gemini LLM scoring**.
+An influencer marketing intelligence platform that automates the entire pre-campaign workflow — discovery, qualification, brand safety audit, and pricing — using the **YouTube Data API**, **Tavily web search**, and **Groq LLM** (Llama 3.1).
 
 ### Built With
 
@@ -11,10 +11,10 @@ An influencer marketing intelligence platform that automates the entire pre-camp
 ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Gemini](https://img.shields.io/badge/Gemini-2.0_Flash-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-Llama_3.1-FF6B35?style=for-the-badge)
 ![YouTube API](https://img.shields.io/badge/YouTube-Data_API_v3-FF0000?style=for-the-badge&logo=youtube&logoColor=white)
 ![Tavily](https://img.shields.io/badge/Tavily-Web_Search-5A67D8?style=for-the-badge)
-![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/Supabase-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Pydantic](https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
 ![HTTPX](https://img.shields.io/badge/HTTPX-Async_HTTP-3B3B3B?style=for-the-badge)
 ![CSS](https://img.shields.io/badge/Vanilla_CSS-1572B6?style=for-the-badge&logo=css3&logoColor=white)
@@ -29,7 +29,7 @@ An influencer marketing intelligence platform that automates the entire pre-camp
 - **Tavily Web Search**: Uses Tavily's web search API to discover social media profiles and gather brand safety intelligence.
 - **Brand Safety Audit**: Automatically scans for controversy, scandals, and reputation risks linked to each influencer.
 - **Fair Pricing Engine**: Estimates influencer rates using platform-specific cost-per-post benchmarks based on follower tiers.
-- **Intelligent Scoring**: Ranks candidates using Gemini 2.0 Flash on engagement quality, audience authenticity, niche relevance, and brand safety.
+- **Intelligent Scoring**: Ranks candidates with Groq on engagement quality, audience authenticity, niche relevance, and brand safety.
 - **Competitor Intel**: Discover influencers and brand ambassadors already working with competitor brands.
 - **Campaign History**: Automatically stores previous pipeline runs, accessible via a dedicated history dashboard.
 - **AI Outreach Drafting**: Generates personalized influencer outreach messages based on performance data and brand brief context.
@@ -46,8 +46,8 @@ An influencer marketing intelligence platform that automates the entire pre-camp
 | **Frontend** | React + Vite + Vanilla CSS |
 | **Backend** | FastAPI (Python 3.11+) |
 | **Influencer Discovery** | YouTube Data API v3 + Tavily Web Search |
-| **LLM Engine** | Google Gemini 2.0 Flash (Ollama as optional fallback) |
-| **Database** | SQLite |
+| **LLM Engine** | Groq (Llama 3.1 8B Instant) via LangChain |
+| **Database** | Supabase PostgreSQL (SQLAlchemy) |
 
 ### Project Structure
 
@@ -56,27 +56,25 @@ CreatorLens/
 ├── backend/
 │   ├── main.py                       # FastAPI app entry point, CORS, router registration
 │   ├── chains/
-│   │   ├── chain_0_ICP.py            # Converts brand briefs into Ideal Creator Profiles (ICP)
-│   │   ├── chain_1_keywordExpansion.py # Maps ICP into executable platform search queries
-│   │   └── chain_2_discovery.py      # Orchestrates platform searches to discover raw candidates
+│   │   ├── chain_0_ICP.py            # Brand brief → Ideal Creator Profile (Groq)
+│   │   ├── chain_1_keywordExpansion.py # ICP → YouTube search query objects
+│   │   ├── chain_2_discovery.py      # YouTube discovery → RawCreatorProfile list
+│   │   ├── chain_3_filtering.py      # Hard-drop filter rules
+│   │   ├── chain_4_audit.py          # Tavily safety + Groq audit + pricing
+│   │   └── pipeline.py               # Pipeline orchestration + DB save
 │   ├── routes/
-│   │   └── campaign.py               # API route definitions (no business logic)
+│   │   └── campaign.py               # API route definitions
 │   ├── services/
 │   │   ├── platforms/
-│   │   │   ├── youtube.py            # YouTube Data API v3 client (search, stats, discovery)
-│   │   │   └── tavily.py             # Tavily web search client (search, parsing, competitor intel)
-│   │   ├── discovery.py              # Multi-platform discovery aggregator
-│   │   ├── auditor.py                # Profile qualification, brand safety audit, pricing
-│   │   ├── llm_client.py             # LLM API calls, retry logic, JSON parsing
-│   │   ├── scoring.py                # Pre-filter, missing data estimates, LLM scoring
-│   │   ├── outreach.py               # Personalized outreach message drafting
-│   │   ├── pipeline.py               # Full campaign execution pipeline (background task)
-│   │   └── agents.py                 # Backward-compatibility shim (re-exports only)
+│   │   │   ├── youtube.py            # YouTube Data API v3 client
+│   │   │   └── instagram.py          # Tavily client (brand safety, competitor intel)
+│   │   ├── llm_client.py             # Groq chat for outreach
+│   │   └── outreach.py               # Personalized outreach message drafting
 │   ├── models/
 │   │   └── schemas.py                # Pydantic request/response models
-│   ├── db/
-│   │   └── database.py               # SQLite database init, CRUD operations
-│   └── creatorlens.db                # SQLite database file
+│   └── db/
+│       ├── database.py               # Supabase PostgreSQL CRUD
+│       └── models.py                 # SQLAlchemy ORM models
 ├── frontend/
 │   └── src/
 │       ├── App.jsx                   # Root component, screen routing
@@ -109,28 +107,25 @@ CreatorLens/
 │  │  • GET  /api/campaigns       → list campaign history      │       │
 │  │  • POST /api/outreach/:id/:h → generate outreach message  │       │
 │  │  • POST /api/competitor-intel→ find competitor influencers │       │
-│  │  • POST /api/cancel-agents   → emergency stop             │       │
 │  └──────────────────────────────────────────────────────────┘       │
 │                              │                                      │
 │  ┌───────────────────────────▼──────────────────────────────┐       │
-│  │  Background Pipeline (pipeline.py)                        │       │
-│  │  Step 1 → Step 2 → Step 2b → Step 3 → Step 4 → Step 5   │       │
+│  │  chains/pipeline.py (Chain 0 → 1 → 2 → 3 → 4)            │       │
 │  └──────────────────────────────────────────────────────────┘       │
 │         │                    │                    │                  │
 │  ┌──────▼───────┐  ┌────────▼────────┐  ┌───────▼────────┐         │
-│  │  scoring.py   │  │  platforms/     │  │  database.py   │         │
-│  │  llm_client.py│  │  youtube.py     │  │  (SQLite CRUD) │         │
-│  │  (Gemini LLM) │  │  tavily.py     │  └───────┬────────┘         │
+│  │  chains/      │  │  platforms/     │  │  db/database   │         │
+│  │  llm_client   │  │  youtube.py     │  │  (PostgreSQL)  │         │
+│  │  outreach.py  │  │  instagram.py   │  └───────┬────────┘         │
 │  └──────┬────────┘  └────────┬────────┘          │                  │
 └─────────┼────────────────────┼───────────────────┼─────────────────┘
           │                    │                   │
   ┌───────▼────────┐  ┌───────▼─────────────┐  ┌──▼──────────┐
-  │  Gemini API     │  │ YouTube Data API v3  │  │  SQLite DB  │
-  │  (2.0 Flash)    │  │ Tavily Web Search    │  │             │
+  │  Groq API       │  │ YouTube Data API v3  │  │  Supabase   │
+  │  (Llama 3.1)    │  │ Tavily Web Search    │  │  PostgreSQL │
   └─────────────────┘  │  → YouTube channels  │  └─────────────┘
-                       │  → Instagram profiles│
-                       │  → Twitter profiles  │
-                       │  → Competitor intel   │
+                       │  → Brand safety intel │
+                       │  → Competitor intel    │
                        └──────────────────────┘
 ```
 
@@ -222,7 +217,7 @@ Create a `.env` file in the `backend/` directory:
 ```env
 YOUTUBE_API_KEY=your-youtube-api-key
 TAVILY_API_KEY=your-tavily-api-key
-GEMINI_API_KEY=your-gemini-api-key
+GROQ_API_KEY=your-groq-api-key
 ```
 
 Start the backend server:
@@ -325,25 +320,19 @@ Searches for influencers with sponsored partnerships with a competitor brand.
 }
 ```
 
-### `POST /api/cancel-agents`
-Emergency stop endpoint that clears all active runs.
-
 ---
 
 ## 🤖 Service Architecture
 
-The backend is organized into focused, single-responsibility modules:
-
 | Module | Responsibility | External APIs |
 |---|---|---|
+| **chains/pipeline.py** | Full campaign pipeline orchestration | — |
+| **chains/chain_0_ICP.py** | ICP generation | Groq |
+| **chains/chain_4_audit.py** | Audit, brand safety, pricing | Groq, Tavily |
 | **platforms/youtube.py** | YouTube channel search & statistics | YouTube Data API v3 |
-| **platforms/tavily.py** | Web search, profile parsing, competitor intel | Tavily Search API |
-| **discovery.py** | Multi-platform discovery aggregator | — |
-| **auditor.py** | Qualification, brand safety audit, pricing | YouTube API, Tavily |
-| **llm_client.py** | LLM API calls, retry logic, JSON parsing | Google Gemini API |
-| **scoring.py** | Pre-filtering, estimates, LLM scoring, keywords | — |
-| **outreach.py** | Personalized DM message drafting | Google Gemini API |
-| **pipeline.py** | Full campaign pipeline orchestration | — |
+| **platforms/instagram.py** | Tavily search, brand safety, competitor intel | Tavily Search API |
+| **llm_client.py** | Groq chat for outreach | Groq |
+| **outreach.py** | Personalized DM message drafting | Groq |
 
 ---
 

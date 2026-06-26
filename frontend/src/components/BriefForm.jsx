@@ -350,7 +350,7 @@ export default function BriefForm({ onSubmit }) {
         <button className="submit-btn" onClick={handleSubmit} disabled={loading}>
           {loading ? "LAUNCHING..." : "LAUNCH CAMPAIGN →"}
         </button>
-        <span className="form-note">~2 min · parallel agents · AI scoring</span>
+        <span className="form-note">~2 min · YouTube discovery · Groq audit</span>
       </div>
     </div>
   )

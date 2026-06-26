@@ -1,89 +1,90 @@
 """
-Quick diagnostic: test each pipeline step independently.
-Run from backend/ with: python test_pipeline.py
+Connectivity diagnostic for the current CreatorLens stack.
+Run from backend/: python tests/test_pipeline.py
 """
 import asyncio
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
-async def test_ollama():
-    """Test if Ollama is reachable and the model works."""
-    print("\n[TEST] Ollama connectivity...")
-    from services.scoring import _ollama_chat
+
+def check_env() -> dict[str, bool]:
+    keys = {
+        "GROQ_API_KEY": os.getenv("GROQ_API_KEY"),
+        "YOUTUBE_API_KEY": os.getenv("YOUTUBE_API_KEY"),
+        "TAVILY_API_KEY": os.getenv("TAVILY_API_KEY"),
+    }
+    return {name: bool(value and value.strip()) for name, value in keys.items()}
+
+
+async def test_groq() -> bool:
+    print("\n[TEST] Groq LLM connectivity...")
+    from services.llm_client import llm_chat
+
     try:
-        result = await _ollama_chat("You are helpful.", "Say 'hello' in one word.")
-        print(f"  [OK] Ollama responded: {result[:100]}")
+        result = await llm_chat("You are helpful.", "Reply with exactly: ok")
+        print(f"  [OK] Groq responded: {result[:80]}")
         return True
     except Exception as e:
-        print(f"  [FAIL] Ollama FAILED: {e}")
-        print(f"  → Is 'ollama serve' running? Is the model pulled?")
+        print(f"  [FAIL] Groq FAILED: {e}")
         return False
 
-async def test_tinyfish_api():
-    """Test if TinyFish API key works with a minimal agent call."""
-    print("\n[TEST] TinyFish API connectivity...")
-    key = os.getenv("TINYFISH_API_KEY")
-    if not key:
-        print(f"  [FAIL] TINYFISH_API_KEY is not set!")
-        return False
-    print(f"  Key loaded: {key[:20]}...")
 
-    from services.tinyfish import run_agent
+async def test_youtube() -> bool:
+    print("\n[TEST] YouTube API connectivity...")
+    from services.platforms.youtube import youtube_search
+
     try:
-        result = await run_agent(
-            url="https://www.google.com",
-            goal="What is the page title? Return JSON: {\"title\": str}",
-            stealth=False
-        )
-        print(f"  [OK] TinyFish responded: {result}")
+        items = await youtube_search("fitness review", max_results=1)
+        if not items:
+            print("  [FAIL] YouTube returned no results (check YOUTUBE_API_KEY / quota)")
+            return False
+        print(f"  [OK] YouTube search returned {len(items)} item(s)")
         return True
     except Exception as e:
-        print(f"  [FAIL] TinyFish FAILED: {e}")
+        print(f"  [FAIL] YouTube FAILED: {e}")
         return False
 
-async def test_keyword_expansion():
-    """Test Ollama keyword expansion with a sample brief."""
-    print("\n[TEST] Keyword expansion...")
-    from services.scoring import expand_keywords
-    brief = {"niche": "fitness", "target_audience": "men 18-35"}
+
+async def test_tavily() -> bool:
+    print("\n[TEST] Tavily API connectivity...")
+    from services.platforms.instagram import tavily_search
+
     try:
-        keywords = await expand_keywords(brief)
-        print(f"  [OK] Keywords: {keywords}")
+        results = await tavily_search("test query", max_results=1)
+        print(f"  [OK] Tavily returned {len(results)} result(s)")
         return True
     except Exception as e:
-        print(f"  [FAIL] FAILED: {e}")
+        print(f"  [FAIL] Tavily FAILED: {e}")
         return False
+
 
 async def main():
-    print("="*60)
-    print("CreatorLens Pipeline Diagnostic")
-    print("="*60)
+    print("=" * 60)
+    print("CreatorLens Pipeline Diagnostic (current stack)")
+    print("=" * 60)
 
-    # Check env vars
+    env = check_env()
     print("\n[TEST] Environment variables...")
-    key = os.getenv("TINYFISH_API_KEY")
-    ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    model = os.getenv("OLLAMA_MODEL", "llama3.2")
-    print(f"  TINYFISH_API_KEY: {'[OK] set' if key else '[FAIL] NOT SET'}")
-    print(f"  OLLAMA_BASE_URL: {ollama_url}")
-    print(f"  OLLAMA_MODEL: {model}")
+    for name, ok in env.items():
+        print(f"  {name}: {'[OK] set' if ok else '[FAIL] NOT SET'}")
 
-    # Test Ollama
-    ollama_ok = await test_ollama()
+    groq_ok = await test_groq() if env["GROQ_API_KEY"] else False
+    yt_ok = await test_youtube() if env["YOUTUBE_API_KEY"] else False
+    tavily_ok = await test_tavily() if env["TAVILY_API_KEY"] else False
 
-    # Test TinyFish
-    tinyfish_ok = await test_tinyfish_api()
+    print("\n" + "=" * 60)
+    print("SUMMARY")
+    print("=" * 60)
+    print(f"  Groq:    {'[OK] PASS' if groq_ok else '[FAIL] FAIL'}")
+    print(f"  YouTube: {'[OK] PASS' if yt_ok else '[FAIL] FAIL'}")
+    print(f"  Tavily:  {'[OK] PASS' if tavily_ok else '[FAIL] FAIL'}")
 
-    # Test keyword expansion (depends on Ollama)
-    if ollama_ok:
-        await test_keyword_expansion()
-
-    print(f"\n{'='*60}")
-    print(f"Summary:")
-    print(f"  Ollama:   {'[OK] PASS' if ollama_ok else '[FAIL] FAIL'}")
-    print(f"  TinyFish: {'[OK] PASS' if tinyfish_ok else '[FAIL] FAIL'}")
-    print(f"{'='*60}")
 
 if __name__ == "__main__":
     asyncio.run(main())

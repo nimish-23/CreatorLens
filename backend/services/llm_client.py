@@ -1,6 +1,6 @@
 """
 services/llm_client.py — Lightweight LLM client for non-chain services.
-Used by outreach.py and scoring.py for simple chat completions.
+Used by outreach.py for simple chat completions.
 """
 
 import os

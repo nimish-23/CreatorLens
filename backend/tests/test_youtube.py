@@ -1,49 +1,56 @@
+"""
+YouTube API smoke test using the current youtube.py client.
+Run from backend/: python tests/test_youtube.py
+"""
 import asyncio
 import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "chains"))
+
 from dotenv import load_dotenv
 
-# Load environment variables (like YOUTUBE_API_KEY) from .env
 load_dotenv()
 
-from services.agents import _youtube_search, _youtube_channel_stats
+from chains.chain_2_discovery import extract_channel_id
+from services.platforms.youtube import youtube_search, youtube_channel_stats_batch
+
 
 async def run_tests():
-    print("Testing YouTube API Queries...\n")
-    
-    # Here are a few example queries simulating what the app searches for
-    queries = [
-        "fitness influencer",
-        "male fitness influencer"
-    ]
-    
+    if not os.getenv("YOUTUBE_API_KEY"):
+        print("YOUTUBE_API_KEY not set — skipping YouTube test.")
+        return
+
+    print("Testing YouTube API via services/platforms/youtube.py...\n")
+
+    queries = ["fitness review", "male fitness influencer"]
+
     for q in queries:
-        print(f"==================================================")
+        print("=" * 50)
         print(f"QUERY: '{q}'")
-        print(f"==================================================")
-        
-        # Calling the same helper function used in agents.py
-        results = await _youtube_search(q, max_results=2)
-        
-        if not results:
-            print("No results returned. (Check if your YOUTUBE_API_KEY is valid!)\n")
+        print("=" * 50)
+
+        items = await youtube_search(q, max_results=2)
+        if not items:
+            print("No results returned.\n")
             continue
-            
-        print(f"Found {len(results)} channels.")
-        
-        for idx, r in enumerate(results, 1):
-            print(f"\nResult #{idx}:")
-            
-            # Fetch channel statistics
-            channel_id = r.get("id", {}).get("channelId")
-            if channel_id:
-                stats = await _youtube_channel_stats(channel_id)
-                # Attach the statistics to the result dictionary so it gets printed
-                r["statistics"] = stats.get("statistics", {})
-            
-            # Printing the full raw JSON response so you can see all fields
-            print(json.dumps(r, indent=2))
-        
-        print("\n")
-            
+
+        channel_ids = []
+        for item in items:
+            cid = extract_channel_id(item)
+            if cid:
+                channel_ids.append(cid)
+
+        if channel_ids:
+            stats = await youtube_channel_stats_batch(channel_ids)
+            for item, stat in zip(items, stats):
+                item["channel_stats"] = stat
+
+        print(json.dumps(items, indent=2, default=str))
+        print()
+
+
 if __name__ == "__main__":
     asyncio.run(run_tests())

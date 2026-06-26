@@ -19,9 +19,6 @@ import json
 
 router = APIRouter()
 
-# Compatibility shim — kept for any code that imports active_runs
-active_runs: list[str] = []
-
 
 # -----------------------------------------------------------
 # POST /api/run-campaign
@@ -90,16 +87,6 @@ async def generate_outreach(
 
     message = await draft_outreach(influencer, brief)
     return {"handle": handle, "message": message}
-
-
-# -----------------------------------------------------------
-# POST /api/cancel-agents  — emergency stop
-# -----------------------------------------------------------
-@router.post("/cancel-agents")
-async def cancel_agents():
-    print(f"\n[CANCEL] Cancel requested — {len(active_runs)} active runs")
-    active_runs.clear()
-    return {"cancelled": 0, "message": "No active agents (using free API stack)"}
 
 
 # -----------------------------------------------------------

@@ -3,11 +3,11 @@ import { useState, useEffect } from "react"
 const API = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api"
 
 const STEPS = [
-  { id: 1, name: "Keyword expansion via Ollama" },
-  { id: 2, name: "Discovering influencers via TinyFish agents" },
-  { id: 3, name: "Parallel audit — engagement, brand safety, pricing" },
-  { id: 4, name: "LLM scoring & ranking" },
-  { id: 5, name: "Finalizing results" },
+  { id: 1, name: "Building ideal creator profile (ICP)" },
+  { id: 2, name: "Expanding YouTube search queries" },
+  { id: 3, name: "Discovering creators via YouTube API" },
+  { id: 4, name: "Filtering, auditing, and pricing candidates" },
+  { id: 5, name: "Saving ranked dossiers" },
 ]
 
 function fmt(n) {
@@ -413,11 +413,11 @@ export default function Dashboard({ jobId, onComplete, onReset, loading, results
     if (!loading || !jobId) return
 
     const messages = [
-      "Expanding keywords with Ollama...",
-      "Firing discovery agents + competitor intel agent simultaneously...",
-      "Running parallel audit — engagement, brand safety, pricing all at once...",
-      "Scoring and ranking candidates with LLM...",
-      "Saving results to database...",
+      "Building ICP from brand brief with Groq...",
+      "Formatting YouTube search queries...",
+      "Searching YouTube and fetching channel stats...",
+      "Running brand safety scan, audit, and pricing...",
+      "Saving ranked dossiers to database...",
     ]
 
     let pollCount = 0
@@ -446,10 +446,7 @@ export default function Dashboard({ jobId, onComplete, onReset, loading, results
     return () => clearInterval(interval)
   }, [loading, jobId])
 
-  const handleCancel = async () => {
-    try {
-      await fetch(`${API}/cancel-agents`, { method: "POST" })
-    } catch (e) {}
+  const handleCancel = () => {
     onReset()
   }
 
@@ -496,15 +493,15 @@ export default function Dashboard({ jobId, onComplete, onReset, loading, results
             fontSize: "11px"
           }}>
             <div style={{fontSize: "9px", color: "var(--amber)", letterSpacing: "0.2em", marginBottom: "12px"}}>
-              AGENTS RUNNING IN PARALLEL
+              PIPELINE STAGES
             </div>
             {[
-              "Qualification agent → pulling engagement stats...",
-              "Brand safety agent → scanning Google, Reddit, Twitter/X...",
-              "Pricing agent → benchmarking Collabstr rates...",
-              competitorBrand 
-                ? `Competitor intel → auditing ${competitorBrand} partnerships...`
-                : null
+              "Chain 3 → applying follower and engagement filters...",
+              "Chain 4 → Tavily brand safety scan...",
+              "Chain 4 → Groq audit and pricing estimate...",
+              competitorBrand
+                ? `Note: competitor brands (${competitorBrand}) are not yet merged into results`
+                : null,
             ].filter(Boolean).map((msg, i, arr) => (
               <div key={i} style={{
                 display: "flex",

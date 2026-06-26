@@ -14,7 +14,7 @@ Write a short outreach DM to @{influencer.get('handle')} on behalf of a brand.
 Brand details:
 - Niche: {brief.get('niche')}
 - Target audience: {brief.get('target_audience')}
-- Budget: ${brief.get('budget_min')}–${brief.get('budget_max')}
+- Budget: {brief.get('budget_inr', 'not specified')} INR
 
 Influencer details:
 - Platform: {influencer.get('platform')}
